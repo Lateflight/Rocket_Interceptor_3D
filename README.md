@@ -1,4 +1,4 @@
-#Rocket Interceptor in 6 DOF
+# Rocket Interceptor in 6 DOF
 
-##Specifics of Design
+## Specifics of Design
 
