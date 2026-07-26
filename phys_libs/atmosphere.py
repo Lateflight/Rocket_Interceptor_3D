@@ -64,7 +64,7 @@ def return_atmo_state(z):
 
     NOTE: no floor at z = 0. Called with negative altitude this extrapolates
     the exponential downward and returns density INCREASING with depth, which
-    is not physical. Callers are expected to stop at the ground themselves --
+    is not physical. Callers are expected to stop at the ground themselves.
     physics_engine.py does this via GROUND_ALT."""
     Tem = T(z)
     scale = np.e**(-M_AIR*G0*z/(R_GAS*Tem))   # barometric factor, shared by both

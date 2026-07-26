@@ -1,5 +1,5 @@
 import numpy as np
-import linalg_utils as la
+from . import linalg_utils as la
 
 G0 = 9.81          # m/s^2, standard gravity
 MIN_SPEED = 1e-2   # m/s, below this the airspeed is too small for the drag and

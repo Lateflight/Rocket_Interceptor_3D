@@ -1,5 +1,5 @@
 import numpy as np
-import Constantgen as cnst
+from phys_libs import Constantgen as cnst
 
 
 class Rocket:

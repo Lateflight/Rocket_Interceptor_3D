@@ -1,6 +1,5 @@
 import numpy as np
-from scipy.linalg import solve_continuous_are
-import linalg_utils as la
+from . import linalg_utils as la
 
 # Numerical guards. These are thresholds, not tuning knobs -- each marks the
 # point below which a quantity stops being meaningful rather than merely small.
@@ -91,7 +90,7 @@ def calibrate_bias(rng=None, bias=None, noise_sigma=0.0, n=DEFAULT_CALIB_SAMPLES
 def los_rate(dtheta_a, dtheta_b, dphi, dt_sample):
     """Inertial line-of-sight rate from a body-fixed seeker plus a gyro.
 
-    dtheta_a/dtheta_b: change in the TRUE bearing angles (radians) over the
+    dtheta_a/dtheta_b: change in the true bearing angles (radians) over the
                        sample interval, i.e. arctan(alpha/F_height) differenced
                        between two consecutive fresh seeker frames.
     dphi:              integral of the measured body rate over that SAME
@@ -108,7 +107,7 @@ def los_rate(dtheta_a, dtheta_b, dphi, dt_sample):
     INCREASES:
         dtheta_b = dlambda_b + dphi_x   ->   dlambda_b = dtheta_b - dphi_x
 
-    IMPORTANT -- combine BEFORE filtering. Both terms must be measured over
+    IMPORTANT - combine BEFORE filtering. Both terms must be measured over
     the same interval and summed raw. Filtering the seeker term but not the
     gyro term (or vice versa) leaves a residual of omega - filtered(omega),
     which does not vanish and injects the vehicle's own rotation straight into
@@ -143,7 +142,10 @@ def los_change(sight_old,sight_new,dt):
 
 
 def clamp_gimbal(F_desired, thrust_mag, theta_max_rad):
-    # Normalize desired direction
+    """Clamps the gimbal control.
+    F_desired: The controller's signal of what the thrust should be right now (vector).
+    thrust_mag: the magnitude of the rocket's thrust.
+    theta_max_rad: the maximum deflection from the thrust-down position."""
     norm = np.linalg.norm(F_desired)
     if norm == 0:
         return np.array([0.0, 0.0, thrust_mag])  # default: straight up
