@@ -1,47 +1,186 @@
-# Rocket Interceptor in 6 DOF Simulator
-NOTE: PROTOTYPE, SPLIT INTO GOOD .md LATER
+# Bearing-Only Interceptor Simulation
 
-## Specifics of Design
+A 6-DOF flight simulation of a thrust-vectored interceptor guided onto a
+manoeuvring target using **bearing-only** measurements — a body-fixed seeker
+plus a strapdown rate gyro. No range, no closing velocity, no target state is
+available to the guidance law.
 
-Goal: interception within <= 5m on some trajectory
+The vehicle has no fins and no reaction control. Every steering input is a
+**torque** produced by gimballing the engine about the centre of mass: the
+airframe rotates first and translates as a consequence.
 
-### On board sensors:
- - Circular seeker - Tracks the target within a specified POV as described by two variables alpha and beta (see variable definition for specifics) 
- - On-board gyroscope - Tracks the only current rotational velocity of the rocket interceptor with noise (see physics_engine.py to seed)
+---
 
-### Control authority (see physics.py):
+## Quick start
 
- - Fixed thrust engine
- - Engine gimbal limited at 10 degrees 
+```bash
+python physics_engine.py
+```
 
-## Simulation Basics
+Requires `numpy`, `scipy`, and `matplotlib`. Run from the repository root —
+modules are imported as `from phys_libs import ...`.
 
-### The simulation rests on a few assumptions:
+The run prints a short summary and then opens two live animations (see
+[Output](#output)). Close both windows to exit.
 
- - Simple drag: 1/2\* rho\* v^2\* S\*|v| \*C_d
- - Simple lift: 1/2\* rho\* v^2\* S\* cross(|v|,z) \*C_l applying force at CoM
- - ISA Standard Atmosphere: https://www.engineeringtoolbox.com/international-standard-atmosphere-d_985.html
- - Terrain curvature does not matter (due to all intercepts happening due to on-board computation)
- - Thrust only torque control
- - Target is point mass
- - Rigid body dynamics for the rocket
- - Linear viscous torque from atmosphere
- - For moments of inertia: Ix = Iy
+---
 
- ### There are also two coordinate frames:
- - Body frame: tied directly to the rocket
- - World frame: defined initially
- Conversion happens through Rodrigues's rotation formula (see physics_engine.py , planned to move into linalg_utils.py)
+## Repository layout
 
- ## Planned Features
- ### Acutators
- - Time dependent response
- - Thrust change due to height  \*
- ### Sensors and Noise
- - Seeker noise
- - Kalman filter on Alpha/Beta instead of derivative filter (outer loop) \*
- ### Atmosphere and Flight
- - Lift torque
- - Wind  \*
+```
+physics_engine.py       entry point: parameters, the integration loop, logging
+phys_libs/
+  computer.py           seeker, IMU, LOS-rate estimator  (the "flight computer")
+  PiForce.py            gravity, quadratic drag, sin(AoA) normal force
+  Rocket.py             vehicle object; holds I_principal and its inverse
+  Constantgen.py        moment of inertia for the two-segment rod
+  Rotator_module.py     RK4 step of Euler's rigid-body equations
+  atmosphere.py         ICAO/ISA temperature, pressure, density to 47 km
+  linalg_utils.py       skew, Rodrigues helpers, unit vectors, LQR solve
+  grapher.py            matplotlib animation of a completed engagement
+  PiTorque.py           unused (dead code, kept for reference)
+```
 
-  *NOTE: none of these are guaranteed, as the scope of the project mostly was to demonstrate control law understanding. Everything marked with a \* is a consideration\blind guesses.*
+Design and history documents:
+
+| File | Contents |
+|---|---|
+| `CONTROL.md` | how guidance works: the sensing available, sign conventions, gain selection, design rules, known issues |
+| `CHANGES.md` | every bug fixed, with the reasoning and what the wrong behaviour looked like |
+| `BUGHUNT.md` | open findings, grouped by file and ranked by severity |
+| `interceptor_system.pdf`, `seeker_limit_cycle.pdf` | supporting plots |
+
+---
+
+## The scenario
+
+An interceptor lifts from the ground at the origin against a 1000 kg target
+released at `[200, 10, 13000] m` travelling at `[100, 50, 0] m/s`. The target
+is unpowered and manoeuvres only under gravity and drag. The engagement runs
+for at most 25 s (2500 steps at `dt = 0.01`) and ends on any of:
+
+- range below `HIT_RADIUS` = 5 m — intercept
+- either body reaching `GROUND_ALT` = 0 m
+- interceptor fuel exhaustion
+
+---
+
+## How it works
+
+### Physics
+
+- **Attitude** — Euler's equations integrated with RK4 (`Rotator_module.step`),
+  then the rotation vector `w·dt` applied to `R` via Rodrigues. `R` is
+  re-orthogonalised each step by SVD, with a determinant check that rejects
+  reflections.
+- **Translation** — semi-implicit Euler on thrust + gravity + drag + normal
+  force, all resolved into the world frame.
+- **Mass** — the vehicle is modelled as two sections of mass `m` each (total
+  `2m`). Fuel burns at 0.04 kg/s and the inertia tensor is rebuilt each step
+  from the current mass, so the vehicle gets more responsive as it empties.
+- **Aerodynamics** — quadratic drag, plus a normal force whose magnitude scales
+  with `sin(AoA)`. Both use the ISA atmosphere at each body's own altitude.
+
+### Guidance
+
+The seeker is bolted to the airframe, so a target drifting across the field of
+view is ambiguous — the target may be moving, or the vehicle may be rotating
+underneath the seeker:
+
+```
+dθ/dt  =  λ̇  −  ω
+```
+
+One equation, two unknowns. The gyro supplies `ω`, which makes the **inertial
+LOS rate `λ̇`** observable (`computer.los_rate`). That single measurement is
+what the whole design rests on: driving `λ̇` to zero is a collision course,
+and it needs no range.
+
+Two nested loops:
+
+| Loop | Rate | Input | Output |
+|---|---|---|---|
+| Outer (guidance) | 50 Hz | bearing delta + gyro integral over the same interval | commanded body rate `w_des = N·λ̇` |
+| Inner (rate) | 100 Hz | gyro | gimbal deflection `= K_w·(w_des − w_meas)` |
+
+The commanded deflection is clamped to the mechanical gimbal limit, then the
+thrust vector is rebuilt geometrically from that angle — so deflection stays
+proportional below the limit instead of saturating.
+
+**Critical detail:** the seeker term and the gyro term are summed *raw*, before
+any filtering. Filtering one but not the other leaves a residual of
+`ω − filtered(ω)`, which injects the vehicle's own rotation straight into the
+guidance command.
+
+Set `GUIDANCE = 'pursuit'` for the earlier bearing-PD law, kept for comparison.
+`CONTROL.md` §9 covers why it was replaced.
+
+---
+
+## Key parameters
+
+All in `physics_engine.py`:
+
+| Symbol | Value | Meaning |
+|---|---|---|
+| `dt` | 0.01 s | integration step (100 Hz) |
+| `SEEKER_LAG_STEPS` | 2 | seeker refreshes every 2nd step (50 Hz) |
+| `F_height`, `F_len` | 4, 1 | focal-plane standoff and radius → FOV half-angle 14.0° |
+| `theta_max` | 10° | gimbal mechanical limit |
+| `thrust_mag` | 4000 N | constant while fuel remains |
+| `VISCOUS_DAMP` | 0.2 | artificial body-rate damping in the torque sum |
+| `NAV` | 5.0 | navigation constant `N` |
+| `KW` | 0.10 | inner rate-loop gain |
+| `gyro_bias` | ~0.2 °/s | turn-on bias, calibrated on the pad |
+| `gyro_noise` | 0.0015 rad/s | per-sample white noise |
+
+The FOV half-angle must stay above the lead angle the geometry demands (~12°
+for this scenario), or the seeker loses the target while turning into the
+intercept.
+
+Gyro noise is drawn from a seeded generator (`GYRO_SEED = 12345`), so runs are
+reproducible.
+
+---
+
+## Output
+
+Console:
+
+```
+gyro bias  true [...]
+     estimated [...]   residual [...] rad/s
+Closest approach:  ...
+Final approach:  ...
+Overshoot ratio:  ...
+```
+
+Two matplotlib animations:
+
+1. **3D world view** — interceptor nose and tail traces, target track, LOS
+   line, and a boresight quiver.
+2. **Seeker view** — the raw `[alpha, beta]` bearing inside the FOV circle,
+   with a live range readout. With `F_len = 1` the FOV gate reduces to the unit
+   disc, so bearings are plotted unscaled.
+
+Per-step buffers (`U`, `D`, `X`, `TAR_log`, `LOS_log`, `LOS_rate_log`, …) are
+kept in memory after the loop and can be dumped to CSV for analysis.
+`LOS_rate_log` in particular holds both the gyro-compensated LOS rate and the
+raw seeker-only rate, which is the quickest way to see the compensation working.
+
+---
+
+## Known limitations
+
+- No `Vc` gain scheduling — fixed `N` means the effective loop gain drifts over
+  the engagement.
+- No target-acceleration compensation; augmented PN would need time-to-go,
+  which needs range.
+- Lock loss is handled by *holding* the last bearing, not by reacquiring.
+- One timestep of attitude lag in the translational step.
+- The airframe has no aerodynamic stability or damping model; `VISCOUS_DAMP` is
+  a stand-in.
+- `atmosphere.return_atmo_state` has no floor at `z = 0`; callers must stop at
+  the ground themselves.
+
+See `CONTROL.md` §11 and `BUGHUNT.md` for the full list.
