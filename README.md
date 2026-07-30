@@ -1,12 +1,12 @@
 # Bearing-Only Interceptor Simulation
 
 A 6-DOF flight simulation of a thrust-vectored interceptor guided onto a
-manoeuvring target using **bearing-only** measurements — a body-fixed seeker
-plus a strapdown rate gyro. No range, no closing velocity, no target state is
+maneuvering target using **bearing-only** measurements, a body-fixed seeker,
+and a strapdown rate gyro. No range, closing velocity, or target state is
 available to the guidance law.
 
 The vehicle has no fins and no reaction control. Every steering input is a
-**torque** produced by gimballing the engine about the centre of mass: the
+torque produced by gimballing the engine about the center of mass: the
 airframe rotates first and translates as a consequence.
 
 ---
@@ -17,11 +17,9 @@ airframe rotates first and translates as a consequence.
 python physics_engine.py
 ```
 
-Requires `numpy`, `scipy`, and `matplotlib`. Run from the repository root —
-modules are imported as `from phys_libs import ...`.
+Requires `numpy`, `scipy`, and `matplotlib`. Run from the repository root. Modules are imported as `from phys_libs import ...`.
 
-The run prints a short summary and then opens two live animations (see
-[Output](#output)). Close both windows to exit.
+The run prints a short summary and then opens two live animations (see [Output](#output)). Close both windows to exit.
 
 ---
 
@@ -38,7 +36,6 @@ phys_libs/
   atmosphere.py         ICAO/ISA temperature, pressure, density to 47 km
   linalg_utils.py       skew, Rodrigues helpers, unit vectors, LQR solve
   grapher.py            matplotlib animation of a completed engagement
-  PiTorque.py           unused (dead code, kept for reference)
 ```
 
 Design and history documents:
@@ -52,7 +49,7 @@ Design and history documents:
 
 ---
 
-## The scenario
+## The scenario\*
 
 An interceptor lifts from the ground at the origin against a 1000 kg target
 released at `[200, 10, 13000] m` travelling at `[100, 50, 0] m/s`. The target
@@ -62,6 +59,8 @@ for at most 25 s (2500 steps at `dt = 0.01`) and ends on any of:
 - range below `HIT_RADIUS` = 5 m — intercept
 - either body reaching `GROUND_ALT` = 0 m
 - interceptor fuel exhaustion
+
+*\*Note: scenario paramters can be changed, for more information, see [Key parameters](#key-parameters)]*
 
 ---
 
@@ -103,17 +102,13 @@ Two nested loops:
 | Outer (guidance) | 50 Hz | bearing delta + gyro integral over the same interval | commanded body rate `w_des = N·λ̇` |
 | Inner (rate) | 100 Hz | gyro | gimbal deflection `= K_w·(w_des − w_meas)` |
 
-The commanded deflection is clamped to the mechanical gimbal limit, then the
-thrust vector is rebuilt geometrically from that angle — so deflection stays
-proportional below the limit instead of saturating.
+The commanded deflection is clamped to the mechanical gimbal limit, then the thrust vector is rebuilt geometrically from that angle, so deflection stays proportional below the limit instead of saturating. 
 
-**Critical detail:** the seeker term and the gyro term are summed *raw*, before
-any filtering. Filtering one but not the other leaves a residual of
-`ω − filtered(ω)`, which injects the vehicle's own rotation straight into the
-guidance command.
+**Critical detail:** the seeker term and the gyro term are summed raw, before any filtering. Filtering one but not the other leaves a residual of `ω − filtered(ω)`, which injects the vehicle's own rotation straight into the guidance command.
+
+For the tick of measurements, 20 ms (depending on the scenario, generalizes to `2·dt` [see [Known Limitations](#known-limitations)]) are spent with no guidance in the PN law. Removing this break causes the rocket to use oversaturated values in the derivative term, which can command up to 61 rad/s for trajectories at the edge of the seeker's cone.
 
 Set `GUIDANCE = 'pursuit'` for the earlier bearing-PD law, kept for comparison.
-`CONTROL.md` §9 covers why it was replaced.
 
 ---
 
@@ -182,5 +177,3 @@ raw seeker-only rate, which is the quickest way to see the compensation working.
   a stand-in.
 - `atmosphere.return_atmo_state` has no floor at `z = 0`; callers must stop at
   the ground themselves.
-
-See `CONTROL.md` §11 and `BUGHUNT.md` for the full list.
