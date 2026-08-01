@@ -36,6 +36,7 @@ phys_libs/
   atmosphere.py         ICAO/ISA temperature, pressure, density to 47 km
   linalg_utils.py       skew, Rodrigues helpers, unit vectors, LQR solve
   grapher.py            matplotlib animation of a completed engagement
+  PiTorque.py          quick torque generator, kept for simplicity in case of many forces
 ```
 
 Design and history documents:
