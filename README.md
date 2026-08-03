@@ -39,23 +39,7 @@ phys_libs/
   PiTorque.py          quick torque generator, kept for simplicity in case of many forces
 ```
 
-Design and history documents:
-
-| File | Contents |
-|---|---|
-| `CONTROL.md` | how guidance works: the sensing available, sign conventions, gain selection, design rules, known issues |
-| `CHANGES.md` | every bug fixed, with the reasoning and what the wrong behaviour looked like |
-| `BUGHUNT.md` | open findings, grouped by file and ranked by severity |
-| `interceptor_system.pdf`, `seeker_limit_cycle.pdf` | supporting plots |
-
----
-
-## The scenario\*
-
-An interceptor lifts from the ground at the origin against a 1000 kg target
-released at `[200, 10, 13000] m` travelling at `[100, 50, 0] m/s`. The target
-is unpowered and manoeuvres only under gravity and drag. The engagement runs
-for at most 25 s (2500 steps at `dt = 0.01`) and ends on any of:
+## The scenario conditions\*
 
 - range below `HIT_RADIUS` = 5 m — intercept
 - either body reaching `GROUND_ALT` = 0 m
@@ -91,7 +75,7 @@ underneath the seeker:
 dθ/dt  =  λ̇  −  ω
 ```
 
-One equation, two unknowns. The gyro supplies `ω`, which makes the **inertial
+One equation with two unknowns. The gyro supplies `ω`, which makes the **inertial
 LOS rate `λ̇`** observable (`computer.los_rate`). That single measurement is
 what the whole design rests on: driving `λ̇` to zero is a collision course,
 and it needs no range.
