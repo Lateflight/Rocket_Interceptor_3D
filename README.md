@@ -91,7 +91,7 @@ The commanded deflection is clamped to the mechanical gimbal limit, then the thr
 
 **Critical detail:** the seeker term and the gyro term are summed raw, before any filtering. Filtering one but not the other leaves a residual of `ω − filtered(ω)`, which injects the vehicle's own rotation straight into the guidance command.
 
-For the tick of measurements, 20 ms (depending on the scenario, generalizes to `2·dt` [see [Known Limitations](#known-limitations)]) are spent with no guidance in the PN law. Removing this break causes the rocket to use oversaturated values in the derivative term, which can command up to 61 rad/s for trajectories at the edge of the seeker's cone.
+For the tick of measurements, 20 ms (depending on the scenario, generalizes to `2·dt` [see [Known Limitations](#known-limitations)]) are spent with no guidance in the PN law. Removing this break causes the rocket to use oversaturated values in the derivative term, which can command at around 61 rad/s for trajectories at the edge of the seeker's cone  (at 14 degrees FOV with N=5, error `e` scales as given by $e=\frac{FOV·N}{2·dt}$. Note: conversion to radians necessary).
 
 Set `GUIDANCE = 'pursuit'` for the earlier bearing-PD law, kept for comparison.
 
